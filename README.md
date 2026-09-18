@@ -11,3 +11,9 @@ Funcionalidades:
     - Puede editarlo antes de descargarlo
 - Se va a alimentar de un RAG propio
 - Arranque con docker, con client, server, BD
+
+## Server
+
+Ver [server/README.md](server/README.md) para arquitectura, puesta en marcha
+e ingesta del RAG (Postgres/pgvector sobre la Constitución + memoria de
+casos en MongoDB).
