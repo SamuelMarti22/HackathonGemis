@@ -36,9 +36,6 @@ class RespuestaJuridicaLLM(BaseModel):
     )
 
 
-RESPUESTA_JURIDICA_JSON_SCHEMA = RespuestaJuridicaLLM.model_json_schema()
-
-
 # --- Lo que efectivamente devuelve la API (ya enriquecido y verificado) ---
 
 

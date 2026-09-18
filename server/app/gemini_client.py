@@ -88,7 +88,10 @@ def stream_text(prompt: str, system_instruction: str) -> Iterator[str]:
             time.sleep(BASE_DELAY_SECONDS * (2**attempt))
 
 
-def generate_json(prompt: str, system_instruction: str, json_schema: dict) -> str:
+def generate_json(prompt: str, system_instruction: str, response_schema: type) -> str:
+    """`response_schema` es una clase Pydantic; la versión de google-genai
+    pineada en requirements.txt (1.2.0) no soporta `response_json_schema`
+    (dict crudo), sólo `response_schema` con un tipo/Pydantic model."""
     client = get_client()
 
     def call():
@@ -99,7 +102,7 @@ def generate_json(prompt: str, system_instruction: str, json_schema: dict) -> st
                 system_instruction=system_instruction,
                 temperature=0.0,
                 response_mime_type="application/json",
-                response_json_schema=json_schema,
+                response_schema=response_schema,
             ),
         )
 

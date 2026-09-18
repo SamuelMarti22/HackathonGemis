@@ -30,7 +30,6 @@ from app.gemini_client import generate_json, stream_text
 from app.retrieval import RetrievedChunk, best_similarity, has_enough_evidence, retrieve
 from app.schemas import (
     DISCLAIMER,
-    RESPUESTA_JURIDICA_JSON_SCHEMA,
     NormaCitada,
     RespuestaJuridica,
     RespuestaJuridicaLLM,
@@ -104,7 +103,7 @@ def build_normas_response(db: Session, caso: str, chunks: list[RetrievedChunk]) 
         f"CANDIDATOS (únicos artículos que puedes citar):\n{candidates_block}"
     )
 
-    raw = generate_json(prompt, NORMAS_SYSTEM_PROMPT, RESPUESTA_JURIDICA_JSON_SCHEMA)
+    raw = generate_json(prompt, NORMAS_SYSTEM_PROMPT, RespuestaJuridicaLLM)
     llm_response = RespuestaJuridicaLLM.model_validate(json.loads(raw))
 
     by_key = {(c.kind, c.number): c for c in chunks}
