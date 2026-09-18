@@ -1,4 +1,6 @@
 """Repositorio de mensajes (colección `messages`): preguntas del usuario y respuestas del modelo."""
+from __future__ import annotations
+
 from datetime import datetime, timezone
 
 from pymongo import ASCENDING
