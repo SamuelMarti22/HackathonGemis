@@ -1,5 +1,6 @@
-// Datos de ejemplo (mock) solo para poder mapear el layout.
-// Cuando exista el backend + RAG, esto se reemplaza por datos reales.
+// Datos de ejemplo (mock) para las secciones que aún no tienen endpoint en
+// el backend: generación de documentos y biblioteca normativa. El chat
+// ("Asistente legal") ya consume el backend real (ver src/api/chat.js).
 
 export const mockDocumentos = [
   {
@@ -24,33 +25,6 @@ export const mockDocumentos = [
     editado: "Editado recientemente",
   },
 ];
-
-export const mockRespuestaCaso = {
-  resumen:
-    "Relatas que tu EPS lleva más de 20 días sin autorizar un procedimiento médico ordenado por tu especialista, a pesar de que ya radicaste la orden. En términos legales, esto puede configurar una vulneración del derecho fundamental a la salud por mora injustificada en la autorización de servicios.",
-  normativas: [
-    {
-      titulo: "Constitución Política de Colombia, art. 49",
-      descripcion: "Derecho a la salud como servicio público a cargo del Estado.",
-      url: "https://www.constitucioncolombia.com/titulo-2/capitulo-2/articulo-49",
-    },
-    {
-      titulo: "Ley Estatutaria 1751 de 2015, art. 8",
-      descripcion: "Continuidad e integralidad en la prestación del servicio de salud.",
-      url: "https://www.minsalud.gov.co/Normatividad_Nuevo/Ley%201751%20de%202015.pdf",
-    },
-    {
-      titulo: "Decreto 780 de 2016, art. 2.5.3.4",
-      descripcion: "Plazos máximos para autorización de servicios en salud.",
-      url: "https://www.minsalud.gov.co/sites/rid/Lists/BibliotecaDigital/RIDE/DE/DIJ/decreto-780-de-2016.pdf",
-    },
-  ],
-  recomendaciones: [
-    "Radica un derecho de petición ante la EPS solicitando la autorización explícita y el tiempo de respuesta.",
-    "Guarda copia de la orden médica y del radicado como soporte.",
-    "Si no obtienes respuesta en 15 días hábiles, presenta una acción de tutela por conexidad con el derecho a la salud.",
-  ],
-};
 
 export const mockNormas = [
   {

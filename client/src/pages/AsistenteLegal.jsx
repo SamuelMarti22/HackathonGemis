@@ -3,22 +3,53 @@ import DisclaimerBanner from "../components/DisclaimerBanner.jsx";
 import ResumenCaso from "../components/ResumenCaso.jsx";
 import NormativasAplicables from "../components/NormativasAplicables.jsx";
 import Recomendaciones from "../components/Recomendaciones.jsx";
-import { mockRespuestaCaso } from "../data/mock.js";
+import { createCase, streamChat } from "../api/chat.js";
 
-// Página "Asistente legal / Nuevo caso".
-// Solo mapea las dos vistas (estado inicial y resultado del caso) con
-// datos de ejemplo. El envío real a un backend/RAG no está implementado.
+// Página "Asistente legal / Nuevo caso", conectada al backend real:
+// POST /cases crea el caso y POST /cases/{id}/chat trae, por streaming
+// (SSE), el resumen, la normativa aplicable, las recomendaciones y el
+// disclaimer (ver client/src/api/chat.js y server/app/routes/cases.py).
 
 export default function AsistenteLegal() {
   const [relato, setRelato] = useState("");
-  const [mostrarResultado, setMostrarResultado] = useState(false);
-  const [resumenListo, setResumenListo] = useState(false);
+  const [caseId, setCaseId] = useState(null);
+  const [estado, setEstado] = useState("inicial"); // inicial | enviando | streaming | listo | error
+  const [resumen, setResumen] = useState("");
+  const [normasResp, setNormasResp] = useState(null); // RespuestaJuridica del backend
+  const [error, setError] = useState(null);
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
-    if (!relato.trim()) return;
-    setResumenListo(false);
-    setMostrarResultado(true);
+    const mensaje = relato.trim();
+    if (!mensaje || estado === "enviando" || estado === "streaming") return;
+
+    setError(null);
+    setResumen("");
+    setNormasResp(null);
+    setEstado("enviando");
+
+    try {
+      let id = caseId;
+      if (!id) {
+        const caso = await createCase();
+        id = caso.id;
+        setCaseId(id);
+      }
+
+      setEstado("streaming");
+      await streamChat(id, mensaje, {
+        onResumen: (pieza) => setResumen((prev) => prev + pieza),
+        onNormas: (respuesta) => setNormasResp(respuesta),
+        onDone: () => setEstado("listo"),
+        onError: (err) => {
+          setError(err.message);
+          setEstado("error");
+        },
+      });
+    } catch (err) {
+      setError(err.message);
+      setEstado("error");
+    }
   }
 
   function handleKeyDown(event) {
@@ -30,9 +61,15 @@ export default function AsistenteLegal() {
 
   function handleNuevoCaso() {
     setRelato("");
-    setMostrarResultado(false);
-    setResumenListo(false);
+    setCaseId(null);
+    setEstado("inicial");
+    setResumen("");
+    setNormasResp(null);
+    setError(null);
   }
+
+  const mostrarResultado = estado !== "inicial";
+  const streaming = estado === "enviando" || estado === "streaming";
 
   return (
     <div className="flex h-screen flex-1 flex-col">
@@ -64,27 +101,33 @@ export default function AsistenteLegal() {
               <p className="mt-1 text-slate-800">{relato}</p>
             </div>
 
-            <ResumenCaso
-              texto={mockRespuestaCaso.resumen}
-              stream
-              onComplete={() => setResumenListo(true)}
-            />
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                No pude conectar con el asistente: {error}
+              </div>
+            )}
 
-            {resumenListo && (
+            {(resumen || streaming) && !error && (
+              <ResumenCaso texto={resumen} streaming={estado === "enviando" || (estado === "streaming" && !normasResp)} />
+            )}
+
+            {normasResp && (
               <div className="flex flex-col gap-5 animate-[fadeIn_0.3s_ease-in]">
-                <NormativasAplicables normativas={mockRespuestaCaso.normativas} />
-                <Recomendaciones pasos={mockRespuestaCaso.recomendaciones} />
-                <DisclaimerBanner />
+                <NormativasAplicables normativas={normasResp.normas_aplicables} />
+                <Recomendaciones pasos={normasResp.recomendaciones} />
+                <DisclaimerBanner texto={normasResp.disclaimer} />
+              </div>
+            )}
 
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleNuevoCaso}
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
-                  >
-                    Empezar un nuevo caso
-                  </button>
-                </div>
+            {estado === "listo" && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleNuevoCaso}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
+                >
+                  Empezar un nuevo caso
+                </button>
               </div>
             )}
           </div>
@@ -101,13 +144,15 @@ export default function AsistenteLegal() {
           onKeyDown={handleKeyDown}
           placeholder="Cuéntame qué ocurrió..."
           rows={2}
-          className="resize-none border-none text-slate-800 outline-none placeholder:text-slate-400"
+          disabled={streaming}
+          className="resize-none border-none text-slate-800 outline-none placeholder:text-slate-400 disabled:bg-transparent disabled:text-slate-400"
         />
         <div className="flex items-center justify-between border-t border-slate-100 pt-2">
           <span className="text-xs text-slate-400">Presiona Enter para enviar</span>
           <button
             type="submit"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-700"
+            disabled={streaming}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300"
           >
             ↑
           </button>
