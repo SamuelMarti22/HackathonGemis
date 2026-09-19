@@ -22,7 +22,7 @@ services:
       MONGO_URI: mongodb://mongo:27017
       MONGO_DB: tutor_juridico
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      CHAT_MODEL: gemini-3.6-flash
+      CHAT_MODEL: gemini-3.5-flash-lite
       PDF_PATH: /app/RAG/COLOMBIA-Constitucion.pdf
     depends_on:
       - postgres

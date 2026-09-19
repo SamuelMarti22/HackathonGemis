@@ -10,11 +10,18 @@ export async function createCase() {
 }
 
 // Consume el streaming SSE de POST /cases/{id}/chat:
-//   event: resumen (varios, texto plano acumulable)
-//   event: normas  (uno, JSON: RespuestaJuridica)
+//   event: resumen         (varios, texto plano acumulable)
+//   event: normas          (uno, JSON: RespuestaJuridica — puede traer mecanismo_recomendado)
+//   event: documento       (uno, opcional, JSON: documento guardado en Mongo, sin `cuerpo`)
+//   event: error_documento (uno, opcional, JSON: { detail } — no genera el documento pero el
+//                            resto del turno sigue siendo válido)
 //   event: done
-//   event: error   (JSON: { detail })
-export async function streamChat(caseId, mensaje, { onResumen, onNormas, onDone, onError }) {
+//   event: error           (JSON: { detail } — falla todo el turno)
+export async function streamChat(
+  caseId,
+  mensaje,
+  { onResumen, onNormas, onDocumento, onErrorDocumento, onDone, onError }
+) {
   let res;
   try {
     res = await fetch(`${API_URL}/cases/${caseId}/chat`, {
@@ -46,7 +53,14 @@ export async function streamChat(caseId, mensaje, { onResumen, onNormas, onDone,
       while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
         const rawEvent = buffer.slice(0, sepIndex);
         buffer = buffer.slice(sepIndex + 2);
-        dispatchEvent(parseEventBlock(rawEvent), { onResumen, onNormas, onDone, onError });
+        dispatchEvent(parseEventBlock(rawEvent), {
+          onResumen,
+          onNormas,
+          onDocumento,
+          onErrorDocumento,
+          onDone,
+          onError,
+        });
       }
     }
   } catch (err) {
@@ -64,11 +78,18 @@ function parseEventBlock(block) {
   return { event, data: dataLines.join("\n") };
 }
 
-function dispatchEvent({ event, data }, { onResumen, onNormas, onDone, onError }) {
+function dispatchEvent(
+  { event, data },
+  { onResumen, onNormas, onDocumento, onErrorDocumento, onDone, onError }
+) {
   if (event === "resumen") {
     onResumen?.(data);
   } else if (event === "normas") {
     onNormas?.(safeJson(data));
+  } else if (event === "documento") {
+    onDocumento?.(safeJson(data));
+  } else if (event === "error_documento") {
+    onErrorDocumento?.(new Error(safeJson(data)?.detail || "No se pudo generar el documento"));
   } else if (event === "done") {
     onDone?.();
   } else if (event === "error") {

@@ -14,11 +14,12 @@ class Settings(BaseSettings):
     mongo_db: str = "tutor_juridico"
 
     gemini_api_key: str = ""
-    # "gemini-flash-latest" resuelve al modelo más nuevo (ahora mismo
-    # gemini-3.8-flash), cuyo tier gratuito sólo permite 20 requests/día.
-    # gemini-2.5-flash ya no está disponible para keys nuevas; la propia API
-    # recomienda gemini-3.6-flash.
-    chat_model: str = "gemini-3.6-flash"
+    # Los modelos "flash" normales (gemini-flash-latest -> 3.8-flash,
+    # gemini-3.6-flash) tienen en el tier gratuito de keys nuevas un límite
+    # de sólo 20 requests/día, insuficiente para un par de turnos de chat
+    # (cada turno con mecanismo aplicable hace 3 llamadas). Los modelos
+    # "flash-lite" tienen cuota gratuita mucho más generosa.
+    chat_model: str = "gemini-3.5-flash-lite"
     embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768
 

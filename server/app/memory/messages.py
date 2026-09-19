@@ -15,7 +15,14 @@ class MessageRepository:
         self._col = db["messages"]
         self._col.create_index([("case_id", ASCENDING), ("created_at", ASCENDING)])
 
-    def add(self, case_id: str, role: str, content: str, normas: dict | None = None) -> None:
+    def add(
+        self,
+        case_id: str,
+        role: str,
+        content: str,
+        normas: dict | None = None,
+        documento_id: str | None = None,
+    ) -> None:
         doc = {
             "case_id": case_id,
             "role": role,
@@ -24,6 +31,8 @@ class MessageRepository:
         }
         if normas is not None:
             doc["normas"] = normas  # respuesta jurídica estructurada (normas, recomendaciones)
+        if documento_id is not None:
+            doc["documento_id"] = documento_id
         self._col.insert_one(doc)
 
     def list(self, case_id: str) -> list[dict]:
@@ -34,6 +43,7 @@ class MessageRepository:
                 "role": d["role"],
                 "content": d["content"],
                 "normas": d.get("normas"),
+                "documento_id": d.get("documento_id"),
                 "created_at": d["created_at"],
             }
             for d in cursor

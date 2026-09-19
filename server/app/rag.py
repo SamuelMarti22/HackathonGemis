@@ -22,18 +22,29 @@ artículo, lo que procede es esto", nunca una norma inventada):
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
 
 from app.gemini_client import generate_json, stream_text
-from app.retrieval import RetrievedChunk, best_similarity, has_enough_evidence, retrieve
+from app.retrieval import RetrievedChunk, best_similarity, get_article, has_enough_evidence, retrieve
 from app.schemas import (
     DISCLAIMER,
+    MECANISMOS,
+    DocumentoGenerado,
+    DocumentoGeneradoLLM,
+    MecanismoRecomendado,
     NormaCitada,
     RespuestaJuridica,
     RespuestaJuridicaLLM,
 )
+
+
+class DocumentGenerationError(Exception):
+    """Se intentó generar un documento pero falló (error de la API de Gemini,
+    o el borrador citaba un artículo no verificado). El resumen y las normas
+    ya generados siguen siendo válidos: quien llame no debe descartarlos."""
 
 RESUMEN_SYSTEM_PROMPT = """Eres un tutor jurídico que le explica a una persona sin formación \
 legal, en español claro y cercano, qué significa en términos legales la situación que describe.
@@ -60,7 +71,33 @@ inventar una.
 los hechos del caso, en lenguaje sencillo.
 4. Las recomendaciones deben ser pasos concretos y realizables (a quién acudir, qué documento \
 presentar, qué plazo tener en cuenta), basados únicamente en lo que dicen los candidatos y el \
-caso descrito. No des consejos genéricos que no se apoyen en el contexto."""
+caso descrito. No des consejos genéricos que no se apoyen en el contexto.
+5. Si hay_normas_aplicables es true, SIEMPRE debes completar "mecanismo_recomendado" con el \
+mecanismo de protección ciudadana (tutela, derecho de petición, acción de cumplimiento, acción \
+popular, habeas corpus o habeas data) más adecuado para que la persona haga valer su derecho — \
+elige uno solo, el más pertinente, no una lista. Si hay_normas_aplicables es false, déjalo en null."""
+
+DOCUMENTO_SYSTEM_PROMPT = """Eres un tutor jurídico que redacta, en español formal pero \
+comprensible, un borrador completo y listo para editar del mecanismo de protección ciudadana \
+indicado, basado en el caso descrito por la persona.
+
+Reglas estrictas (no negociables):
+1. SOLO puedes citar, dentro del cuerpo del documento, los artículos que aparecen en la lista \
+"Artículos verificados". Nunca cites de memoria un artículo que no esté ahí.
+2. Usa placeholders entre corchetes para cualquier dato personal que no conozcas: \
+[Nombre completo], [Número de cédula], [Dirección], [Ciudad], [Fecha], [Entidad accionada], etc.
+3. Estructura el documento como corresponde al mecanismo (destinatario, hechos basados \
+únicamente en lo que la persona contó, fundamentos de derecho citando los artículos \
+verificados, petición concreta, firma).
+4. No inventes hechos que la persona no haya mencionado."""
+
+
+ARTICULO_MENTION_RE = re.compile(r"[Aa]rt[íi]culo\s+(?:transitorio\s+)?(\d+[A-Za-z]?)")
+
+
+def _citation_number(citation: str) -> str | None:
+    match = re.search(r"(\d+[A-Za-z]?)$", citation)
+    return match.group(1) if match else None
 
 
 def _format_candidates(chunks: list[RetrievedChunk]) -> str:
@@ -138,11 +175,88 @@ def build_normas_response(db: Session, caso: str, chunks: list[RetrievedChunk]) 
             disclaimer=DISCLAIMER,
         )
 
+    mecanismo = _resolve_mecanismo(db, llm_response)
+
     return RespuestaJuridica(
         hay_normas_aplicables=True,
         normas_aplicables=normas,
         recomendaciones=llm_response.recomendaciones,
+        mecanismo_recomendado=mecanismo,
         disclaimer=DISCLAIMER,
+    )
+
+
+def _resolve_mecanismo(db: Session, llm_response: RespuestaJuridicaLLM) -> MecanismoRecomendado | None:
+    rec = llm_response.mecanismo_recomendado
+    if rec is None:
+        return None
+    info = MECANISMOS.get(rec.tipo)
+    if info is None:
+        # Tipo fuera del enum validado por pydantic no debería pasar, pero
+        # por defensa en profundidad no se muestra nada no reconocido.
+        return None
+
+    base_article = get_article(db, "articulo", info["articulo_base"])
+    return MecanismoRecomendado(
+        tipo=rec.tipo,
+        nombre=info["nombre"],
+        justificacion=rec.justificacion,
+        articulo_base=base_article.citation if base_article else f"Artículo {info['articulo_base']}",
+        articulo_base_url=base_article.source_url if base_article else None,
+    )
+
+
+def generate_document(db: Session, caso: str, respuesta: RespuestaJuridica) -> DocumentoGenerado | None:
+    """Redacta el borrador del mecanismo recomendado en `respuesta`. Devuelve
+    None cuando no hay caso/mecanismo real (no es un error). Lanza
+    DocumentGenerationError si se intentó generar pero falló — el llamador
+    puede capturarlo sin perder el resumen ni las normas ya obtenidos."""
+    if not respuesta.hay_normas_aplicables or respuesta.mecanismo_recomendado is None:
+        return None
+
+    mecanismo = respuesta.mecanismo_recomendado
+
+    citation_numbers = {n.citation: _citation_number(n.citation) for n in respuesta.normas_aplicables}
+    allowed_numbers = {v for v in citation_numbers.values() if v}
+    base_number = _citation_number(mecanismo.articulo_base)
+    if base_number:
+        allowed_numbers.add(base_number)
+
+    normas_lines = [f"- {n.citation}: {n.extracto[:500]}" for n in respuesta.normas_aplicables]
+    if mecanismo.articulo_base not in citation_numbers:
+        normas_lines.insert(0, f"- {mecanismo.articulo_base} (consagra el mecanismo {mecanismo.nombre})")
+
+    prompt = (
+        f'Caso descrito por la persona:\n"""\n{caso}\n"""\n\n'
+        f"Mecanismo a redactar: {mecanismo.nombre} ({mecanismo.tipo})\n"
+        f"Por qué aplica: {mecanismo.justificacion}\n\n"
+        f"Artículos verificados que puedes citar (ningún otro):\n" + "\n".join(normas_lines)
+    )
+
+    try:
+        raw = generate_json(prompt, DOCUMENTO_SYSTEM_PROMPT, DocumentoGeneradoLLM)
+        llm_doc = DocumentoGeneradoLLM.model_validate(json.loads(raw))
+    except Exception as exc:  # noqa: BLE001
+        raise DocumentGenerationError(f"No se pudo generar el documento: {exc}") from exc
+
+    mentioned = {m.group(1) for m in ARTICULO_MENTION_RE.finditer(llm_doc.cuerpo)}
+    if not mentioned <= allowed_numbers:
+        # El borrador citó un artículo no verificado: no se muestra un
+        # documento legal potencialmente alucinado, se falla explícitamente.
+        raise DocumentGenerationError(
+            "El borrador generado citaba artículos no verificados; se descartó por seguridad."
+        )
+
+    normas_citadas = list(citation_numbers.keys())
+    if mecanismo.articulo_base not in citation_numbers:
+        normas_citadas.insert(0, mecanismo.articulo_base)
+
+    return DocumentoGenerado(
+        tipo=mecanismo.tipo,
+        titulo=llm_doc.titulo,
+        explicacion_mecanismo=llm_doc.explicacion_mecanismo,
+        cuerpo=llm_doc.cuerpo,
+        normas_citadas=normas_citadas,
     )
 
 
@@ -155,4 +269,6 @@ __all__ = [
     "build_normas_response",
     "retrieve_for_case",
     "best_similarity",
+    "generate_document",
+    "DocumentGenerationError",
 ]

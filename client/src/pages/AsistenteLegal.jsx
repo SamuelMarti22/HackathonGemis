@@ -3,6 +3,7 @@ import DisclaimerBanner from "../components/DisclaimerBanner.jsx";
 import ResumenCaso from "../components/ResumenCaso.jsx";
 import NormativasAplicables from "../components/NormativasAplicables.jsx";
 import Recomendaciones from "../components/Recomendaciones.jsx";
+import MecanismoRecomendado from "../components/MecanismoRecomendado.jsx";
 import { createCase, streamChat } from "../api/chat.js";
 
 // Página "Asistente legal / Nuevo caso", conectada al backend real:
@@ -16,6 +17,8 @@ export default function AsistenteLegal() {
   const [estado, setEstado] = useState("inicial"); // inicial | enviando | streaming | listo | error
   const [resumen, setResumen] = useState("");
   const [normasResp, setNormasResp] = useState(null); // RespuestaJuridica del backend
+  const [documento, setDocumento] = useState(null); // documento generado (sin `cuerpo`), si aplica
+  const [errorDocumento, setErrorDocumento] = useState(null);
   const [error, setError] = useState(null);
 
   async function handleSubmit(event) {
@@ -26,6 +29,8 @@ export default function AsistenteLegal() {
     setError(null);
     setResumen("");
     setNormasResp(null);
+    setDocumento(null);
+    setErrorDocumento(null);
     setEstado("enviando");
 
     try {
@@ -40,6 +45,8 @@ export default function AsistenteLegal() {
       await streamChat(id, mensaje, {
         onResumen: (pieza) => setResumen((prev) => prev + pieza),
         onNormas: (respuesta) => setNormasResp(respuesta),
+        onDocumento: (doc) => setDocumento(doc),
+        onErrorDocumento: (err) => setErrorDocumento(err),
         onDone: () => setEstado("listo"),
         onError: (err) => {
           setError(err.message);
@@ -65,6 +72,8 @@ export default function AsistenteLegal() {
     setEstado("inicial");
     setResumen("");
     setNormasResp(null);
+    setDocumento(null);
+    setErrorDocumento(null);
     setError(null);
   }
 
@@ -115,6 +124,14 @@ export default function AsistenteLegal() {
               <div className="flex flex-col gap-5 animate-[fadeIn_0.3s_ease-in]">
                 <NormativasAplicables normativas={normasResp.normas_aplicables} />
                 <Recomendaciones pasos={normasResp.recomendaciones} />
+                {normasResp.mecanismo_recomendado && (
+                  <MecanismoRecomendado
+                    mecanismo={normasResp.mecanismo_recomendado}
+                    documento={documento}
+                    errorDocumento={errorDocumento}
+                    generandoDocumento={estado !== "listo" && !documento && !errorDocumento}
+                  />
+                )}
                 <DisclaimerBanner texto={normasResp.disclaimer} />
               </div>
             )}

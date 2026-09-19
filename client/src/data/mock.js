@@ -1,30 +1,6 @@
-// Datos de ejemplo (mock) para las secciones que aún no tienen endpoint en
-// el backend: generación de documentos y biblioteca normativa. El chat
-// ("Asistente legal") ya consume el backend real (ver src/api/chat.js).
-
-export const mockDocumentos = [
-  {
-    id: "doc-1",
-    titulo: "Derecho de petición a EPS",
-    tipo: "Derecho de petición",
-    estado: "Listo para revisar",
-    editado: "Editado recientemente",
-  },
-  {
-    id: "doc-2",
-    titulo: "Solicitud de historia clínica",
-    tipo: "Derecho de petición",
-    estado: "Borrador",
-    editado: "Editado recientemente",
-  },
-  {
-    id: "doc-3",
-    titulo: "Tutela por servicio de salud",
-    tipo: "Acción de tutela",
-    estado: "Listo para revisar",
-    editado: "Editado recientemente",
-  },
-];
+// Datos de ejemplo (mock) para "Biblioteca normativa", que todavía no tiene
+// endpoint en el backend. El chat y "Mis documentos" ya consumen el backend
+// real (ver src/api/chat.js y src/api/documents.js).
 
 export const mockNormas = [
   {
@@ -56,9 +32,3 @@ export const mockNormas = [
     url: "https://www.mintrabajo.gov.co/documents/20147/0/Codigo+Sustantivo+del+Trabajo.pdf",
   },
 ];
-
-export const mockDocumentoContenido = {
-  "doc-1": `Señores\nEPS XYZ\nCiudad\n\nAsunto: Derecho de petición - Autorización de procedimiento médico\n\nYo, [Nombre completo], identificado con C.C. No. [Número], radico la presente solicitud...`,
-  "doc-2": `Señores\nHospital / Clínica\nCiudad\n\nAsunto: Solicitud de copia de historia clínica\n\nYo, [Nombre completo], identificado con C.C. No. [Número], solicito...`,
-  "doc-3": `Señor(a) Juez\nReparto\nCiudad\n\nAccionante: [Nombre completo]\nAccionado: EPS XYZ\n\nAsunto: Acción de tutela por vulneración del derecho a la salud...`,
-};

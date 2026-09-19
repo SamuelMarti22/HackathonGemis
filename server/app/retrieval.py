@@ -56,3 +56,26 @@ def best_similarity(chunks: list[RetrievedChunk]) -> float:
 
 def has_enough_evidence(chunks: list[RetrievedChunk]) -> bool:
     return best_similarity(chunks) >= settings.min_similarity
+
+
+def get_article(db: Session, kind: str, number: str) -> RetrievedChunk | None:
+    """Trae un artículo puntual (ej. el que consagra un mecanismo de
+    protección) directo de la base de datos, sin pasar por el modelo — así
+    su cita y URL siempre son reales, nunca las "recuerda" el LLM."""
+    row = db.execute(
+        select(ArticleChunk)
+        .where(ArticleChunk.kind == kind, ArticleChunk.number == number)
+        .limit(1)
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    return RetrievedChunk(
+        kind=row.kind,
+        number=row.number,
+        citation=row.citation,
+        titulo=row.titulo,
+        capitulo=row.capitulo,
+        source_url=row.source_url,
+        text=row.text,
+        similarity=1.0,
+    )
