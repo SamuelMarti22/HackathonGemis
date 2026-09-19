@@ -18,10 +18,12 @@ server/data/article_links.json ──┘        │
                                            │
                                     app/retrieval.py (similitud coseno)
                                            │
-                                     app/rag.py  ──► Gemini (resumen + normas)
+                                     app/rag.py  ──► Gemini (resumen, normas,
+                                           │          mecanismo, documento)
                                            │
-                          app/routes/cases.py + app/chat_service.py
-                          (historial de conversación en MongoDB)
+                          app/routes/cases.py + app/routes/documents.py
+                          + app/chat_service.py
+                          (casos, mensajes y documentos en MongoDB)
 ```
 
 **Diseño anti-alucinación** (ver docstring de `app/rag.py`): el modelo sólo
@@ -30,7 +32,9 @@ pgvector; si no hay evidencia suficiente, el bot admite que no encontró
 norma aplicable. Después de generar, el backend verifica programáticamente
 que cada artículo citado esté realmente entre los candidatos — la URL y el
 texto mostrados al usuario siempre se toman de la base de datos, nunca de lo
-que "dice" el modelo.
+que "dice" el modelo. La misma verificación aplica al borrador del
+documento (tutela, derecho de petición, …) que genera `generate_document`:
+si cita un artículo no verificado, se descarta por completo.
 
 ## Puesta en marcha
 
@@ -60,15 +64,21 @@ que "dice" el modelo.
 ## Endpoints
 
 - `GET /health`
-- `POST /cases` → `{case_id}`
+- `POST /cases` → `{id, title, created_at}`
 - `GET /cases` → lista de casos
 - `GET /cases/{case_id}` → caso + mensajes
 - `DELETE /cases/{case_id}`
-- `POST /cases/{case_id}/chat` `{"mensaje": "..."}` → Server-Sent Events:
+- `POST /cases/{case_id}/chat` `{"mensaje": "..."}` → Server-Sent Events, en orden:
   - `event: resumen` (varios, streaming) — resumen jurídico de la situación
-  - `event: normas` (uno) — `{hay_normas_aplicables, normas_aplicables: [{citation, url, por_que_aplica, extracto, ...}], recomendaciones, disclaimer}`
+  - `event: normas` (uno) — `{hay_normas_aplicables, normas_aplicables: [{citation, url, por_que_aplica, extracto, ...}], recomendaciones, mecanismo_recomendado: {tipo, nombre, justificacion, articulo_base, articulo_base_url} | null, disclaimer}`
+  - `event: documento` (opcional, solo si hay mecanismo aplicable) — el documento ya guardado en Mongo (sin `cuerpo`)
+  - `event: error_documento` (opcional) — el documento falló pero el resumen y las normas siguen siendo válidos
   - `event: done`
-  - `event: error` (si algo falla)
+  - `event: error` (si falla todo el turno)
+- `GET /documents` (`?case_id=` opcional) → lista de documentos generados
+- `GET /documents/{id}` → documento completo, incluye `cuerpo`
+- `PUT /documents/{id}` `{titulo?, cuerpo?, aceptado?}` → edita el documento
+- `DELETE /documents/{id}`
 
 ## Notas
 
@@ -76,6 +86,11 @@ que "dice" el modelo.
   items/minuto; `ingest/ingest.py` ya reintenta con backoff cuando recibe
   un 429, así que puede tardar unos minutos en correr contra el corpus
   completo (~550 fragmentos).
-- `ARTICLE_LINKS.md` / `data/article_links.json` apunta a la Secretaría del
-  Senado; si cambia su estructura de páginas, vuelve a correr
-  `build_article_links.py`.
+- `CHAT_MODEL`: los modelos "flash" recién liberados
+  (`gemini-flash-latest`, `gemini-3.6-flash`, …) suelen tener solo 20
+  requests/día gratis en una key nueva — cada turno con mecanismo
+  aplicable hace 3 llamadas de generación (resumen, normas, documento), así
+  que se agota rápido. `gemini-3.5-flash-lite` (el default) tiene cuota
+  gratuita mucho más generosa.
+- `data/article_links.json` apunta a la Secretaría del Senado; si cambia
+  su estructura de páginas, vuelve a correr `build_article_links.py`.
